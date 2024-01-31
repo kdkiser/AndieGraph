@@ -5,6 +5,9 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
@@ -60,7 +63,7 @@ public abstract class Ti8xActivity extends FullScreenActivity {
 	public Thread mThread;
 	public TISkinModel mSkinModel;
 	public TIGutsModel mGutsModel;
-	public TIButton mPressedButton;
+	public HashMap<Integer, TIButton> mPressedButtons = new HashMap<Integer, TIButton>();
 
 	public PowerManager.WakeLock mWakeLock;
 
@@ -104,35 +107,68 @@ public abstract class Ti8xActivity extends FullScreenActivity {
 				return false;
 			}
 
-			Point p = mSkinView.screenToButton((int) event.getX(),
-				(int) event.getY());
+			// Ensuring that we track each finger for multitouch
+			int pointerIndex = event.getActionIndex();
+			int pointerId = event.getPointerId(pointerIndex);
+
+			Point p = mSkinView.screenToButton((int) event.getX(pointerIndex),
+				(int) event.getY(pointerIndex));
 
 			if (Log.isLoggable(TAG, Log.DEBUG)) {
 				Log.d(TAG, "skin onTouch event at adjusted (" + p.x + ", "
 					+ p.y + ")");
 			}
 
-			switch (event.getAction()) {
+			switch (event.getActionMasked()) {
 
 			case MotionEvent.ACTION_UP:
+			case MotionEvent.ACTION_POINTER_UP:
 				// We know to un-press the currently pressed button
-				if (mPressedButton != null) {
-					keyUp();
+				if (mPressedButtons.containsKey(pointerId)) {
+					keyUp(pointerId);
 				}
 				break;
 
 			case MotionEvent.ACTION_DOWN:
-			case MotionEvent.ACTION_MOVE:
-				// Check if moving off a pressed button
-				if (mPressedButton != null
-					&& !mPressedButton.rect.contains(p.x, p.y)) {
-					keyUp();
+			case MotionEvent.ACTION_POINTER_DOWN:
+
+				TIButton currentButton = mSkinModel.getButtonAt(p);
+				// Check if clicking or moving onto a new button
+				if (!mPressedButtons.containsKey(pointerId)
+					&& (currentButton != null)) {
+					mPressedButtons.put(pointerId, currentButton);
+					keyDown(pointerId);
 				}
 
-				// Check if clicking or moving onto a new button
-				if (mPressedButton == null
-					&& (mPressedButton = mSkinModel.getButtonAt(p)) != null) {
-					keyDown();
+				break;
+
+			case MotionEvent.ACTION_MOVE:
+				int pointerCount = event.getPointerCount();
+				HashMap<Integer, TIButton> currentButtons = new HashMap<Integer, TIButton>();
+				for(int i = 0; i < pointerCount; ++i)
+				{
+					pointerIndex = i;
+					pointerId = event.getPointerId(pointerIndex);
+					p = mSkinView.screenToButton((int) event.getX(pointerIndex),
+												 (int) event.getY(pointerIndex));
+					currentButtons.put(pointerId, mSkinModel.getButtonAt(p));
+				}
+				ArrayList<Integer> noLongerHeldButtons = new ArrayList<Integer>();
+				for (HashMap.Entry<Integer, TIButton> entry : mPressedButtons.entrySet()) {
+					if (entry.getValue() != null & !currentButtons.containsValue(entry.getValue()))
+					{
+						noLongerHeldButtons.add(entry.getKey());
+					}
+				}
+				for (int i = 0; i < noLongerHeldButtons.size() ; i++) {
+					keyUp(noLongerHeldButtons.get(i));
+				}
+				for (HashMap.Entry<Integer, TIButton> entry : currentButtons.entrySet()) {
+					if (entry.getValue() != null & !mPressedButtons.containsValue(entry.getValue()))
+					{
+						mPressedButtons.put(entry.getKey(), entry.getValue());
+						keyDown(entry.getKey());
+					}
 				}
 
 				break;
@@ -142,25 +178,24 @@ public abstract class Ti8xActivity extends FullScreenActivity {
 			return false;
 		}
 
-		private void keyUp() {
+		private void keyUp(int pointerId) {
 			if (mThread == null || !mThread.isAlive()) {
 				return;
 			}
 
-			mScreenView.mKeyQueue.add(new ScreenView.KeyState(mPressedButton.keycode, false));
-
-			mPressedButton = null;
-			mSkinView.clearPressedButton();
+			mScreenView.mKeyQueue.add(new ScreenView.KeyState(mPressedButtons.get(pointerId).keycode, false));
+			mSkinView.clearPressedButton(mPressedButtons.get(pointerId));
+			mPressedButtons.remove(pointerId);
 		}
 
-		private void keyDown() {
+		private void keyDown(int pointerId) {
 			if (mThread == null || !mThread.isAlive()) {
 				return;
 			}
 
-			mScreenView.mKeyQueue.add(new ScreenView.KeyState(mPressedButton.keycode, true));
+			mScreenView.mKeyQueue.add(new ScreenView.KeyState(mPressedButtons.get(pointerId).keycode, true));
 
-			mSkinView.setPressedButton(mPressedButton);
+			mSkinView.setPressedButton(mPressedButtons.get(pointerId));
 
 			// Vibrate
 			if (mDoVibrate) {
