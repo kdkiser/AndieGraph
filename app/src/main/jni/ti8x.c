@@ -9,10 +9,13 @@
 #include "TI85.h"
 
 #include <assert.h>
-#include <stdio.h>
-#include <sys/time.h>
-#include <stdlib.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
 
 #define  LOG_TAG    "libti8x"
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,LOG_TAG,__VA_ARGS__)
@@ -148,7 +151,9 @@ byte Keypad(void) {
 /** Show backdrop image with calculator faceplate.          **/
 /*************************************************************/
 // Nothing needed here. Backdrop is handled in JAVA.
-int ShowBackdrop(const char *FileName) { }
+int ShowBackdrop(const char *FileName) {
+    return 0;
+}
 
 /** OnLoad ***************************************************/
 /** Called from JAVA when JNI is initialized.               **/
@@ -352,14 +357,14 @@ JNIEXPORT void JNICALL Java_net_supware_tipro_NativeLib_start(
     // fill ROM file name
     const char * szRomFilename = (*env)->GetStringUTFChars(
         env, romFilename, &isCopy);  
-    strcpy(ROMPath, szRomFilename);
+    strncpy(ROMPath, szRomFilename, 255);
     (*env)->ReleaseStringUTFChars(
         env, romFilename, szRomFilename);  
 
     // fill RAM file name
     const char * szRamFilename = (*env)->GetStringUTFChars(
         env, ramFilename, &isCopy);  
-    strcpy(RAMPath, szRamFilename);
+    strncpy(RAMPath, szRamFilename, 255);
     (*env)->ReleaseStringUTFChars(
         env, ramFilename, szRamFilename);  
 
